@@ -653,3 +653,6 @@ got
 mode
 flag
 HOME
+T
+DIRTYTXT
+_f

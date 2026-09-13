@@ -56,7 +56,24 @@ done
 printf '#!/bin/sh\n# /home/%s/something\n' "$OLD_USER" > /usr/local/bin/fake-with-path
 chmod +x /usr/local/bin/fake-with-path
 echo "   + binary mentioning /home/$OLD_USER"
-EXPECTED+=("binaries carrying the build path")
+# A shell script, so the message to wait for is the text sweep's, not the ELF
+# one's. It used to expect "binaries carrying the build path" and that check
+# never looks at anything but ELF, so this sabotage went unanswered and the
+# batch reported one blind check -- correctly, and for every image so far.
+EXPECTED+=("text files carrying the build path")
+
+# And a real ELF carrying the path, so the older sweep stays exercised too.
+# Appending to a copy keeps the magic bytes it filters on and puts the string
+# where `grep -qa` finds it, which is what a Rust or Zig binary does on its own
+# by baking the source path into .rodata.
+if cp /usr/bin/true /usr/local/bin/fake-elf-with-path 2>/dev/null; then
+  printf '/home/%s/build\n' "$OLD_USER" >> /usr/local/bin/fake-elf-with-path
+  chmod +x /usr/local/bin/fake-elf-with-path
+  echo "   + ELF binary mentioning /home/$OLD_USER"
+  EXPECTED+=("binaries carrying the build path")
+else
+  echo "   - could not copy an ELF to sabotage (nothing proven)"
+fi
 
 # A filename that mentions the build account.
 touch "/etc/config-$OLD_USER.conf"

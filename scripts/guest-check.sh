@@ -212,6 +212,27 @@ S=""; for b in /usr/local/bin/* /usr/bin/* /usr/lib/*.so*; do
   LC_ALL=C grep -qa "/home/$OLD" "$b" && S="$S $(basename "$b")"
 done
 [ -z "$S" ] && ok_ "no binary mentions the build account" || bad "binaries carrying the build path:$S"
+
+# Text files too. The sweep above skips anything that is not ELF, and almost
+# everything this image adds to /usr/local is a shell script: the omarchy-arm-*
+# commands, the hooks, the records. A builder path left in one of those was
+# invisible to every check here -- negative-test-2 plants exactly that and the
+# list stayed green, which is how the gap was found rather than reasoned about.
+#
+# Scoped to what this build writes. /usr/bin is thousands of distribution files
+# that cannot mention a path invented on this machine, and scanning them buys
+# nothing but minutes.
+T=""
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  [ -L "$f" ] && continue
+  head -c 4 "$f" 2>/dev/null | grep -qa 'ELF' && continue
+  LC_ALL=C grep -qa "/home/$OLD" "$f" 2>/dev/null && T="$T $(basename "$f")"
+done <<EOF
+$(find /usr/local /usr/share/omarchy-arm "/home/$NEW/.config" -xdev -type f 2>/dev/null)
+EOF
+[ -z "$T" ] && ok_ "no shipped script or config mentions the build account" \
+             || bad "text files carrying the build path:$T"
 P=$(find "/home/$NEW" /etc /usr/local /opt -xdev -mindepth 1 -regextype posix-extended \
      -regex ".*/([^/]*[^[:alnum:]])?$OLD([^[:alnum:]][^/]*)?" 2>/dev/null | wc -l)
 [ "$P" -eq 0 ] && ok_ "no filename mentions the build account" || bad "$P files mention it"

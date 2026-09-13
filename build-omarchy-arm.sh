@@ -3548,6 +3548,24 @@ if [ "$OLD" != "$NEW" ]; then
     done
     [ -z "$DIRTY" ] && ok_ "no compiled binary in /usr/bin, /usr/local/bin or /usr/lib mentions the build account" \
                      || bad "binaries carrying the build path inside:$DIRTY (see RUSTFLAGS/CARGO_HOME in stage3)"
+
+    # And the text files, which the sweep above skips: it requires ELF, and
+    # almost everything this build adds to /usr/local is a shell script -- the
+    # omarchy-arm-* commands, the hooks, the records. A builder path left in one
+    # of those shipped unseen. Found by negative-test-2, which plants exactly
+    # that and then watched every check on this list stay green.
+    #
+    # Scoped to what this build writes: /usr/bin holds thousands of distribution
+    # files that cannot mention a path invented on this machine.
+    DIRTYTXT=""
+    while IFS= read -r _f; do
+      [ -f "$_f" ] || continue
+      [ -L "$_f" ] && continue
+      head -c 4 "$_f" 2>/dev/null | grep -qa 'ELF' && continue
+      LC_ALL=C grep -qa "/home/$OLD" "$_f" 2>/dev/null && DIRTYTXT="$DIRTYTXT $_f"
+    done < <(find /usr/local /usr/share/omarchy-arm "/home/$NEW/.config" -xdev -type f 2>/dev/null)
+    [ -z "$DIRTYTXT" ] && ok_ "no shipped script or config mentions the builder" \
+                       || bad "text files carrying the build path:$DIRTYTXT"
   fi
 fi
 [ -f /root/failed-packages.txt ] && bad "/root/failed-packages.txt left behind" \
